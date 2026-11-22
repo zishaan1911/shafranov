@@ -18,7 +18,8 @@ add_library(shafranov_core STATIC
   src/core/grid.cpp
   src/core/machine.cpp
   src/core/poisson.cpp
-  src/core/profiles.cpp)
+  src/core/profiles.cpp
+  src/core/topology.cpp)
 target_include_directories(shafranov_core PUBLIC src)
 target_link_libraries(shafranov_core PRIVATE shafranov_warnings)
 
