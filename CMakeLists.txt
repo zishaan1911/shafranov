@@ -15,7 +15,8 @@ add_library(shafranov_core STATIC
   src/core/dst.cpp
   src/core/eqdsk.cpp
   src/core/greens.cpp
-  src/core/grid.cpp)
+  src/core/grid.cpp
+  src/core/machine.cpp)
 target_include_directories(shafranov_core PUBLIC src)
 target_link_libraries(shafranov_core PRIVATE shafranov_warnings)
 
