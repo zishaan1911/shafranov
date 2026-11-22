@@ -12,7 +12,8 @@ add_executable(shafranov_tests
   test_spectral.cpp
   test_eqdsk.cpp
   test_machine.cpp
-  test_tcv_data.cpp)
+  test_tcv_data.cpp
+  test_poisson.cpp)
 target_link_libraries(shafranov_tests PRIVATE shafranov_core shafranov_warnings doctest::doctest)
 target_compile_definitions(shafranov_tests PRIVATE
   SHAFRANOV_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
