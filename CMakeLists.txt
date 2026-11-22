@@ -14,3 +14,6 @@ target_compile_options(shafranov_warnings INTERFACE -Wall -Wextra -Wpedantic -We
 add_library(shafranov_core INTERFACE)
 target_include_directories(shafranov_core INTERFACE src)
 target_link_libraries(shafranov_core INTERFACE shafranov_warnings)
+
+enable_testing()
+add_subdirectory(tests)
