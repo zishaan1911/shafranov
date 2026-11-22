@@ -10,6 +10,7 @@ add_executable(shafranov_tests
   test_constants.cpp
   test_greens.cpp
   test_spectral.cpp
-  test_eqdsk.cpp)
+  test_eqdsk.cpp
+  test_machine.cpp)
 target_link_libraries(shafranov_tests PRIVATE shafranov_core shafranov_warnings doctest::doctest)
 add_test(NAME shafranov_tests COMMAND shafranov_tests)
