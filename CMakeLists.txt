@@ -13,6 +13,7 @@ target_compile_options(shafranov_warnings INTERFACE -Wall -Wextra -Wpedantic -We
 
 add_library(shafranov_core STATIC
   src/core/dst.cpp
+  src/core/eqdsk.cpp
   src/core/greens.cpp
   src/core/grid.cpp)
 target_include_directories(shafranov_core PUBLIC src)
