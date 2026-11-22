@@ -6,7 +6,8 @@ the Tokamak à Configuration Variable at EPFL, written in C++20.
 It solves the Grad–Shafranov equation on TCV's coil and vessel geometry and evolves the coil, vessel and plasma
 currents in time, so the vertical instability comes out of the equations rather than being scripted.
 
-**Status:** early. The project skeleton builds; the solver is next.
+**Status:** early. Green's functions, the fast Grad�Shafranov solve, current profiles and flux topology are in;
+the free-boundary equilibrium loop is next.
 
 ## Build
 
@@ -24,8 +25,8 @@ Every claim the simulator makes is backed by a test:
 
 | Check | Status |
 |---|---|
-| Solov'ev analytic equilibrium, second-order convergence | planned |
-| Green's functions against analytic limits | planned |
+| Solov'ev analytic equilibrium, second-order convergence | passing |
+| Green's functions against analytic limits | passing |
 | Code-to-code against FreeGS on TCV geometry | planned |
 | Vertical growth rates against published TCV values | planned |
 
