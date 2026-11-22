@@ -12,6 +12,7 @@ add_library(shafranov_warnings INTERFACE)
 target_compile_options(shafranov_warnings INTERFACE -Wall -Wextra -Wpedantic -Werror)
 
 add_library(shafranov_core STATIC
+  src/core/dst.cpp
   src/core/greens.cpp
   src/core/grid.cpp)
 target_include_directories(shafranov_core PUBLIC src)
