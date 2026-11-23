@@ -6,8 +6,8 @@ the Tokamak à Configuration Variable at EPFL, written in C++20.
 It solves the Grad–Shafranov equation on TCV's coil and vessel geometry and evolves the coil, vessel and plasma
 currents in time, so the vertical instability comes out of the equations rather than being scripted.
 
-**Status:** the free-boundary equilibrium and the inverse shape solve work on TCV and agree with FreeGS.
-Time evolution (vessel currents and the vertical instability) and the live window are next.
+**Status:** free-boundary equilibria and the inverse shape solve agree with FreeGS; coil, vessel and plasma
+currents evolve in time and the vertical instability emerges from the circuit equations. Feedback control is next.
 
 ![The live window: a lower single-null TCV plasma, its separatrix and X-point, and the E and F coil currents the
 inverse solve chose](docs/window.png)
@@ -35,7 +35,10 @@ Every claim the simulator makes is backed by a test:
 | Solov'ev analytic equilibrium, second-order convergence | passing |
 | Green's functions against analytic limits | passing |
 | Code-to-code against FreeGS on TCV geometry | passing: axis 0.01 mm, X-point 0.07 mm, coil currents 0.02% |
-| Vertical growth rates against published TCV values | planned |
+| Coil self-inductances against Marchioni (EPFL thesis, 2024) | passing: OH1 6.92 / 6.9 mH, F 7.44 / 7.4 mH, E 1.74 / 1.7 mH |
+| Vessel current decay times against Hofmann et al. (1996) | passing: 13.4 / 14.0 ms (even), 8.1 / 8.6 ms (odd) |
+| Vertical instability: grows, faster with elongation | passing: 445, 843, 1857 1/s at kappa 1.3, 1.4, 1.5 |
+| Vertical growth rate of a specific TCV shot | not yet: needs that shot's reconstructed shape; TCV's measured rates are a few hundred to ~1500 1/s, the same range |
 
 ## Machine data
 
