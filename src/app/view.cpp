@@ -44,15 +44,14 @@ void add_segments(std::vector<double>& xs, std::vector<double>& ys, const std::v
     }
 }
 
-void rebuild_caches(ViewState& st, const Snapshot& snap, const MachineGrid& mg) {
+void rebuild_caches(PlotCache& st, const Equilibrium& eq, bool ok, const MachineGrid& mg) {
     st.heat.clear();
     st.flux_x.clear();
     st.flux_y.clear();
     st.sep_x.clear();
     st.sep_y.clear();
     const Grid& g = mg.grid;
-    const Equilibrium& eq = snap.eq;
-    if (!snap.error.empty() || eq.psi.size() != static_cast<std::size_t>(g.size())) {
+    if (!ok || eq.psi.size() != static_cast<std::size_t>(g.size())) {
         return;
     }
     const double psi_axis = eq.topology.axis.psi;
@@ -240,8 +239,10 @@ void draw_controls(ViewState& st, Worker& worker, const MachineGrid& mg,
     }
 }
 
-void draw_plot(ViewState& st, const MachineGrid& mg, const Machine& machine,
-               const std::shared_ptr<const Snapshot>& snap) {
+// The cross-section. `targets` (shape-target circles) and `error` are optional.
+void draw_section(const PlotCache& st, const Equilibrium& eq, const Currents& currents,
+                  const ShapeTargets* targets, const std::string& error, const MachineGrid& mg,
+                  const Machine& machine) {
     const Grid& g = mg.grid;
     if (!ImPlot::BeginPlot("##section", ImVec2(-1, -1),
                            flags(ImPlotFlags_Equal, ImPlotFlags_NoLegend))) {
@@ -250,7 +251,7 @@ void draw_plot(ViewState& st, const MachineGrid& mg, const Machine& machine,
     ImPlot::SetupAxes("R (m)", "Z (m)", 0, 0);
     ImPlot::SetupAxesLimits(0.35, 1.45, -0.95, 0.95, ImPlotCond_Always);
 
-    const bool have_field = snap && !st.heat.empty();
+    const bool have_field = !st.heat.empty();
     if (have_field) {
         ImPlot::PushColormap(ImPlotColormap_Viridis);
         ImPlot::PlotHeatmap("##psi_n", st.heat.data(), g.nZ, g.nR, 0.0, 2.0, nullptr,
@@ -292,7 +293,7 @@ void draw_plot(ViewState& st, const MachineGrid& mg, const Machine& machine,
     }
 
     if (have_field) {
-        const Topology& t = snap->eq.topology;
+        const Topology& t = eq.topology;
         const int no_legend = ImPlotItemFlags_NoLegend;
         const double ax = t.axis.R, az = t.axis.Z;
         ImPlotSpec axis_spec;
@@ -319,17 +320,18 @@ void draw_plot(ViewState& st, const MachineGrid& mg, const Machine& machine,
                                 spec);
         }
 
-        const ShapeTargets targets = targets_for(snap->request);
         std::vector<double> tr, tz;
-        for (const auto& iso : targets.isoflux) {
-            tr.push_back(iso.R1);
-            tz.push_back(iso.Z1);
-            tr.push_back(iso.R2);
-            tz.push_back(iso.Z2);
-        }
-        for (const Point& p : targets.xpoints) {
-            tr.push_back(p.R);
-            tz.push_back(p.Z);
+        if (targets != nullptr) {
+            for (const auto& iso : targets->isoflux) {
+                tr.push_back(iso.R1);
+                tz.push_back(iso.Z1);
+                tr.push_back(iso.R2);
+                tz.push_back(iso.Z2);
+            }
+            for (const Point& p : targets->xpoints) {
+                tr.push_back(p.R);
+                tz.push_back(p.Z);
+            }
         }
         if (!tr.empty()) {
             ImPlotSpec spec;
@@ -351,14 +353,13 @@ void draw_plot(ViewState& st, const MachineGrid& mg, const Machine& machine,
         const ImVec2 hi = ImPlot::PlotToPixels(f.R + 0.5 * f.dR, f.Z - 0.5 * f.dZ);
         dl->AddRectFilled(lo, hi, IM_COL32(150, 150, 150, 255));
     }
-    const bool have_currents = snap && snap->currents.circuits.size() == mg.circuits.size();
+    const bool have_currents = currents.circuits.size() == mg.circuits.size();
     for (const Coil& c : machine.coils) {
         double kA = 0.0;
         if (have_currents) {
             const auto it = std::find(mg.circuits.begin(), mg.circuits.end(), c.circuit);
             if (it != mg.circuits.end()) {
-                kA = snap->currents.circuits[static_cast<std::size_t>(it - mg.circuits.begin())] *
-                     1e-3;
+                kA = currents.circuits[static_cast<std::size_t>(it - mg.circuits.begin())] * 1e-3;
             }
         }
         const ImVec2 lo = ImPlot::PlotToPixels(c.R - 0.5 * c.dR, c.Z + 0.5 * c.dZ);
@@ -369,31 +370,153 @@ void draw_plot(ViewState& st, const MachineGrid& mg, const Machine& machine,
             dl->AddText(ImVec2(hi.x + 3.0f, lo.y), IM_COL32(255, 255, 255, 255), c.name.c_str());
         }
     }
-    if (snap && !snap->error.empty()) {
+    if (!error.empty()) {
         const ImVec2 pos = ImPlot::GetPlotPos();
         dl->AddText(ImVec2(pos.x + 10.0f, pos.y + 8.0f), IM_COL32(255, 70, 70, 255),
-                    snap->error.c_str());
+                    error.c_str());
     }
     ImPlot::PopPlotClipRect();
 
     ImPlot::EndPlot();
 }
 
+// One time trace; samples with vertical control off are redrawn in red on top.
+void trace(const char* id, const char* ylabel, const std::vector<Sample>& h,
+           double Sample::*field, double scale, const ViewState& st) {
+    std::vector<double> t, y, off_t, off_y;
+    for (const Sample& s : h) {
+        t.push_back(s.t * 1e3);
+        y.push_back(s.*field * scale);
+        if (!s.vertical_on) {
+            off_t.push_back(s.t * 1e3);
+            off_y.push_back(s.*field * scale);
+        }
+    }
+    if (!ImPlot::BeginPlot(id, ImVec2(-1, 140), ImPlotFlags_NoLegend)) {
+        return;
+    }
+    ImPlot::SetupAxes("t (ms)", ylabel, 0, ImPlotAxisFlags_AutoFit);
+    ImPlot::SetupAxisLimits(ImAxis_X1, st.t_lo, st.t_hi, ImPlotCond_Once);
+    if (!t.empty()) {
+        ImPlotSpec spec;
+        spec.LineColor = ImVec4(0.30f, 0.65f, 0.95f, 1.0f);
+        spec.Flags = ImPlotItemFlags_NoLegend;
+        ImPlot::PlotLine("##on", t.data(), y.data(), static_cast<int>(t.size()), spec);
+    }
+    if (!off_t.empty()) {
+        ImPlotSpec spec;
+        spec.LineColor = ImVec4(0.95f, 0.30f, 0.30f, 1.0f);
+        spec.LineWeight = 2.0f;
+        spec.Flags = ImPlotItemFlags_NoLegend;
+        ImPlot::PlotLine("##off", off_t.data(), off_y.data(), static_cast<int>(off_t.size()),
+                         spec);
+    }
+    ImPlot::EndPlot();
+}
+
+void draw_discharge_controls(ViewState& st, Discharge& discharge, const DischargeView& v) {
+    const bool running = v.status == DischargeStatus::Running;
+    const bool over = v.status == DischargeStatus::Finished || v.status == DischargeStatus::Lost;
+    ImGui::BeginDisabled(over);
+    if (ImGui::Button(running ? "Pause" : "Run")) {
+        if (running) {
+            discharge.pause();
+        } else {
+            discharge.run();
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) {
+        discharge.reset();
+    }
+    if (ImGui::Checkbox("Vertical control (G coil)", &st.vertical_control)) {
+        discharge.set_vertical_control(st.vertical_control);
+    }
+    if (ImGui::Button("Kick")) {
+        discharge.kick();
+    }
+    ImGui::TextWrapped("Turn vertical control off and kick: the elongated plasma drifts into the "
+                       "wall within milliseconds.");
+
+    ImGui::SeparatorText("Status");
+    switch (v.status) {
+    case DischargeStatus::Paused:
+        ImGui::TextUnformatted("Paused");
+        break;
+    case DischargeStatus::Running:
+        ImGui::TextUnformatted("Running");
+        break;
+    case DischargeStatus::Finished:
+        ImGui::TextUnformatted("Finished");
+        break;
+    case DischargeStatus::Lost:
+        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Plasma lost: %s", v.message.c_str());
+        break;
+    }
+    ImGui::Text("t: %.1f ms", v.t * 1e3);
+    if (!v.history.empty()) {
+        const Sample& s = v.history.back();
+        ImGui::Text("axis: R = %.1f mm, Z = %.1f mm", s.R_axis * 1e3, s.Z_axis * 1e3);
+        ImGui::Text("Ip: %.1f kA", s.Ip * 1e-3);
+        ImGui::Text("G: %.1f A, %.1f V", s.I_G, s.V_G);
+    }
+
+    ImGui::SeparatorText("Traces");
+    ImPlot::SetNextAxisLinks(ImAxis_X1, &st.t_lo, &st.t_hi);
+    trace("##z_axis", "Z axis (mm)", v.history, &Sample::Z_axis, 1e3, st);
+    ImPlot::SetNextAxisLinks(ImAxis_X1, &st.t_lo, &st.t_hi);
+    trace("##ip", "Ip (kA)", v.history, &Sample::Ip, 1e-3, st);
+    ImPlot::SetNextAxisLinks(ImAxis_X1, &st.t_lo, &st.t_hi);
+    trace("##g_current", "G current (A)", v.history, &Sample::I_G, 1.0, st);
+    ImPlot::SetNextAxisLinks(ImAxis_X1, &st.t_lo, &st.t_hi);
+    trace("##g_voltage", "G voltage (V)", v.history, &Sample::V_G, 1.0, st);
+}
+
 } // namespace
 
-void draw(ViewState& state, Worker& worker, const MachineGrid& mg, const Machine& machine) {
+void draw(ViewState& state, Worker& worker, Discharge& discharge, const MachineGrid& mg,
+          const Machine& machine) {
     const std::shared_ptr<const Snapshot> snap = worker.latest();
     if (snap && snap->id != state.seen_id) {
-        rebuild_caches(state, *snap, mg);
+        rebuild_caches(state.eq_cache, snap->eq, snap->error.empty(), mg);
         state.seen_id = snap->id;
+    }
+    const std::shared_ptr<const DischargeView> view = discharge.view();
+    if (state.discharge_mode && view && view != state.seen_view) {
+        rebuild_caches(state.dis_cache, view->eq, true, mg);
+        state.seen_view = view;
     }
 
     if (ImGui::BeginChild("controls", ImVec2(360.0f, 0.0f), ImGuiChildFlags_Borders)) {
-        draw_controls(state, worker, mg, snap);
+        int mode = state.discharge_mode ? 1 : 0;
+        ImGui::RadioButton("Equilibrium", &mode, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Discharge", &mode, 1);
+        state.discharge_mode = (mode == 1);
+        if (state.discharge_mode) {
+            if (view) {
+                draw_discharge_controls(state, discharge, *view);
+            }
+        } else {
+            draw_controls(state, worker, mg, snap);
+        }
     }
     ImGui::EndChild();
     ImGui::SameLine();
-    draw_plot(state, mg, machine, snap);
+    if (state.discharge_mode) {
+        if (view) {
+            draw_section(state.dis_cache, view->eq, view->currents, nullptr, std::string(), mg,
+                         machine);
+        }
+    } else if (snap) {
+        const ShapeTargets targets = targets_for(snap->request);
+        draw_section(state.eq_cache, snap->eq, snap->currents, &targets, snap->error, mg,
+                     machine);
+    } else {
+        draw_section(state.eq_cache, Equilibrium{}, Currents{}, nullptr, std::string(), mg,
+                     machine);
+    }
 }
 
 } // namespace shafranov

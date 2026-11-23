@@ -1,7 +1,9 @@
 #include "app/view.h"
+#include "core/circuits.h"
 #include "core/equilibrium.h"
 #include "core/grid.h"
 #include "core/machine.h"
+#include "sim/discharge.h"
 #include "sim/worker.h"
 
 #include <GLFW/glfw3.h>
@@ -28,6 +30,8 @@ int main(int argc, char** argv) {
     }
     const Grid grid(65, 129, 0.55, 1.20, -0.80, 0.80);
     const MachineGrid mg = make_machine_grid(machine, grid);
+    const CircuitModel model = make_circuit_model(machine, mg);
+    Discharge discharge(mg, model, demo_scenario());
 
     if (!glfwInit()) {
         return 1;
@@ -66,7 +70,7 @@ int main(int argc, char** argv) {
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoSavedSettings |
                              ImGuiWindowFlags_NoBringToFrontOnFocus);
-            draw(state, worker, mg, machine);
+            draw(state, worker, discharge, mg, machine);
             ImGui::End();
 
             ImGui::Render();
