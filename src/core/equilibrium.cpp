@@ -117,15 +117,20 @@ Equilibrium solve_equilibrium(const MachineGrid& mg, Currents& currents, const P
                 rhs[k] = -mu0 * g.R(i) * jphi[k];
             }
         }
+        std::vector<std::size_t> plasma_nodes;
+        for (std::size_t k = 0; k < n; ++k) {
+            if (jphi[k] != 0.0) {
+                plasma_nodes.push_back(k);
+            }
+        }
         std::vector<double> psi(n, 0.0);
         for (std::size_t b = 0; b < mg.boundary.size(); ++b) {
+            const double* row = &mg.boundary_greens[b * n];
             double sum = 0.0;
-            for (std::size_t k = 0; k < n; ++k) {
-                if (jphi[k] != 0.0) {
-                    sum += mg.boundary_greens[b * n + k] * jphi[k] * cell;
-                }
+            for (const std::size_t k : plasma_nodes) {
+                sum += row[k] * jphi[k];
             }
-            psi[static_cast<std::size_t>(mg.boundary[b])] = sum;
+            psi[static_cast<std::size_t>(mg.boundary[b])] = sum * cell;
         }
         solve_poisson(g, rhs, psi);
         return psi;
