@@ -54,9 +54,12 @@ struct InitialPlasma {
 };
 
 struct SolveOptions {
-    int max_iterations = 500; // weakly restoring fields converge slowly (contraction ~0.9)
+    int max_iterations = 500;
     double tolerance = 1e-6; // on max |change in psi| / |psi_axis - psi_bndry|
     double relax = 0.5;      // weight of the new plasma flux in each Picard update
+    // Anderson acceleration depth (0 = plain Picard). Picard alone contracts at ~1/(stability
+    // margin) on marginally stable modes, ~0.99 for TCV with its vessel; Anderson removes that.
+    int anderson = 5;
 };
 
 // Called once per iteration with the latest equilibrium; may change the circuit currents (shape

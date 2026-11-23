@@ -26,6 +26,14 @@ add_library(shafranov_core STATIC
   src/core/topology.cpp
   src/sim/worker.cpp)
 target_include_directories(shafranov_core PUBLIC src)
+include(FetchContent)
+# Header-only; SOURCE_SUBDIR points nowhere so Eigen's own (large) CMake project is not added.
+FetchContent_Declare(eigen
+  URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+  SOURCE_SUBDIR none)
+FetchContent_MakeAvailable(eigen)
+target_include_directories(shafranov_core SYSTEM PUBLIC ${eigen_SOURCE_DIR})
+
 find_package(Threads REQUIRED)
 target_link_libraries(shafranov_core PUBLIC Threads::Threads PRIVATE shafranov_warnings)
 

@@ -4,9 +4,12 @@
 #include "core/greens.h"
 #include "core/poisson.h"
 
+#include <Eigen/Dense>
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <deque>
 #include <stdexcept>
 #include <thread>
 
@@ -169,6 +172,8 @@ Equilibrium solve_equilibrium(const MachineGrid& mg, Currents& currents, const P
     Point hint{initial.R, initial.Z}; // follow the axis from where the plasma starts
 
     Equilibrium eq;
+    std::deque<Eigen::VectorXd> dX, dF;
+    Eigen::VectorXd x_prev, f_prev;
     for (int it = 1; it <= options.max_iterations; ++it) {
         auto total_psi = [&]() {
             const std::vector<double> ext = external(currents);
@@ -201,9 +206,40 @@ Equilibrium solve_equilibrium(const MachineGrid& mg, Currents& currents, const P
             change = std::max(change, std::abs(new_pl[k] - psi_pl[k]));
         }
         change /= std::abs(eq.topology.axis.psi - eq.topology.psi_bndry);
-        for (std::size_t k = 0; k < n; ++k) {
-            psi_pl[k] = options.relax * new_pl[k] + (1.0 - options.relax) * psi_pl[k];
+        // Anderson-accelerated update: x <- x + b f - (dX + b dF) g, g = argmin |f - dF g|, where
+        // f = new - x is the Picard residual and dX, dF hold the last few differences.
+        const Eigen::Map<const Eigen::VectorXd> x(psi_pl.data(), static_cast<Eigen::Index>(n));
+        const Eigen::Map<const Eigen::VectorXd> gx(new_pl.data(), static_cast<Eigen::Index>(n));
+        const Eigen::VectorXd f = gx - x;
+        Eigen::VectorXd next = x + options.relax * f;
+        if (options.anderson > 0) {
+            // Restart when the residual grows, so an extrapolation that overshot is not built upon.
+            if (it > 1 && f.norm() > f_prev.norm()) {
+                dX.clear();
+                dF.clear();
+            } else if (it > 1) {
+                dX.push_back(x - x_prev);
+                dF.push_back(f - f_prev);
+                if (static_cast<int>(dX.size()) > options.anderson) {
+                    dX.pop_front();
+                    dF.pop_front();
+                }
+            }
+            x_prev = x;
+            f_prev = f;
+            if (!dF.empty()) {
+                const auto m = static_cast<Eigen::Index>(dF.size());
+                Eigen::MatrixXd F(static_cast<Eigen::Index>(n), m);
+                Eigen::MatrixXd X(static_cast<Eigen::Index>(n), m);
+                for (Eigen::Index c = 0; c < m; ++c) {
+                    F.col(c) = dF[static_cast<std::size_t>(c)];
+                    X.col(c) = dX[static_cast<std::size_t>(c)];
+                }
+                const Eigen::VectorXd gamma = F.colPivHouseholderQr().solve(f);
+                next -= (X + options.relax * F) * gamma;
+            }
         }
+        Eigen::Map<Eigen::VectorXd>(psi_pl.data(), static_cast<Eigen::Index>(n)) = next;
         eq.iterations = it;
 
         if (change < options.tolerance) {
