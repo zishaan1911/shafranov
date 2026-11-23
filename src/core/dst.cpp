@@ -29,13 +29,22 @@ void fft(std::vector<Complex>& a) {
         }
     }
 
+    // Each twiddle is evaluated directly (no recurrence) so its error does not accumulate; the
+    // table is kept per thread because the same size is transformed many times per solve.
+    thread_local std::vector<Complex> twiddle;
+    if (twiddle.size() != n / 2) {
+        twiddle.resize(n / 2);
+        for (std::size_t k = 0; k < n / 2; ++k) {
+            twiddle[k] = std::polar(1.0, -2.0 * pi * static_cast<double>(k) / static_cast<double>(n));
+        }
+    }
+
     for (std::size_t len = 2; len <= n; len <<= 1) {
         const std::size_t half = len / 2;
+        const std::size_t stride = n / len;
         for (std::size_t start = 0; start < n; start += len) {
             for (std::size_t k = 0; k < half; ++k) {
-                // Direct evaluation per index keeps twiddle error from accumulating.
-                const Complex w = std::polar(1.0, -2.0 * pi * static_cast<double>(k) /
-                                                      static_cast<double>(len));
+                const Complex w = twiddle[k * stride];
                 const Complex u = a[start + k];
                 const Complex v = a[start + k + half] * w;
                 a[start + k] = u + v;
