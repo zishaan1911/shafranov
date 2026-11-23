@@ -27,6 +27,7 @@ add_library(shafranov_core STATIC
   src/core/poisson.cpp
   src/core/profiles.cpp
   src/core/topology.cpp
+  src/sim/discharge.cpp
   src/sim/worker.cpp)
 target_include_directories(shafranov_core PUBLIC src)
 include(FetchContent)
