@@ -24,6 +24,7 @@ struct Row {
     std::vector<Term> terms;
     std::vector<double> circuit; // per amp in each circuit
     std::vector<double> vessel;  // per amp in each vessel filament
+    std::vector<double> plasma;  // per A/m^2 at each grid node
 };
 
 double filament_value(Quantity q, double Rc, double Zc, double R, double Z) {
@@ -50,6 +51,17 @@ Row make_row(const MachineGrid& mg, Quantity q, std::vector<Term> terms) {
     for (const Term& t : row.terms) {
         for (std::size_t v = 0; v < mg.vessel.size(); ++v) {
             row.vessel[v] += t.sign * filament_value(q, mg.vessel[v].R, mg.vessel[v].Z, t.R, t.Z);
+        }
+    }
+    const Grid& g = mg.grid;
+    const double cell = g.dR() * g.dZ();
+    row.plasma.assign(static_cast<std::size_t>(g.size()), 0.0);
+    for (const Term& t : row.terms) {
+        for (int i = 0; i < g.nR; ++i) {
+            for (int j = 0; j < g.nZ; ++j) {
+                row.plasma[static_cast<std::size_t>(g.idx(i, j))] +=
+                    t.sign * filament_value(q, g.R(i), g.Z(j), t.R, t.Z) * cell;
+            }
         }
     }
     return row;
@@ -121,32 +133,26 @@ Feedback shape_feedback(const MachineGrid& mg, const ShapeTargets& targets) {
     }
     const double gamma = targets.gamma;
 
-    return [&mg, rows, free_idx, is_fixed, gamma](const Equilibrium& eq, Currents& currents) {
+    return [rows, free_idx, is_fixed, gamma](const Equilibrium& eq, Currents& currents) {
         const std::size_t n = free_idx.size();
         const std::size_t m = rows.size();
         if (n == 0 || m == 0) {
             return;
         }
-        const Grid& g = mg.grid;
-        const double cell = g.dR() * g.dZ();
+        std::vector<std::size_t> plasma_nodes;
+        for (std::size_t k = 0; k < eq.jphi.size(); ++k) {
+            if (eq.jphi[k] != 0.0) {
+                plasma_nodes.push_back(k);
+            }
+        }
 
         std::vector<double> A(m * n);
         std::vector<double> b(m);
         for (std::size_t r = 0; r < m; ++r) {
             const Row& row = rows[r];
             double rest = 0.0;
-            for (const Term& t : row.terms) {
-                double plasma = 0.0;
-                for (int i = 0; i < g.nR; ++i) {
-                    for (int j = 0; j < g.nZ; ++j) {
-                        const double J = eq.jphi[static_cast<std::size_t>(g.idx(i, j))];
-                        if (J != 0.0) {
-                            plasma += filament_value(row.quantity, g.R(i), g.Z(j), t.R, t.Z) * J *
-                                      cell;
-                        }
-                    }
-                }
-                rest += t.sign * plasma;
+            for (const std::size_t k : plasma_nodes) {
+                rest += row.plasma[k] * eq.jphi[k];
             }
             for (std::size_t c = 0; c < is_fixed.size(); ++c) {
                 if (is_fixed[c]) {
