@@ -9,6 +9,9 @@ currents in time, so the vertical instability comes out of the equations rather 
 **Status:** the free-boundary equilibrium and the inverse shape solve work on TCV and agree with FreeGS.
 Time evolution (vessel currents and the vertical instability) and the live window are next.
 
+![The live window: a lower single-null TCV plasma, its separatrix and X-point, and the E and F coil currents the
+inverse solve chose](docs/window.png)
+
 ## Build
 
 Needs CMake 3.24+, Ninja and a C++20 compiler (gcc 13+ tested).
@@ -18,6 +21,10 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
+
+The live window (`build/src/app/shafranov_app`) needs OpenGL 3.3; pass `-DSHAFRANOV_APP=OFF` to build without it.
+Drag the plasma shape and the inverse solve picks the coil currents, or switch to fixed currents and watch an
+elongated plasma lose its vertical position.
 
 ## Validation
 
