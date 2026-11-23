@@ -8,6 +8,7 @@ FetchContent_MakeAvailable(doctest)
 add_executable(shafranov_tests
   test_main.cpp
   test_constants.cpp
+  test_coils.cpp
   test_greens.cpp
   test_spectral.cpp
   test_eqdsk.cpp
