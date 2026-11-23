@@ -27,5 +27,10 @@ target_include_directories(shafranov_core PUBLIC src)
 find_package(Threads REQUIRED)
 target_link_libraries(shafranov_core PUBLIC Threads::Threads PRIVATE shafranov_warnings)
 
+option(SHAFRANOV_APP "Build the live window (needs OpenGL)" ON)
+if(SHAFRANOV_APP)
+  add_subdirectory(src/app)
+endif()
+
 enable_testing()
 add_subdirectory(tests)
