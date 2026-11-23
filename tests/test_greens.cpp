@@ -105,3 +105,19 @@ TEST_CASE("mutual inductance of coaxial rings matches Maxwell's formula") {
     CHECK(shafranov::mutual_inductance(R1, 0.0, R2, sep) ==
           doctest::Approx(expected).epsilon(1e-10));
 }
+
+TEST_CASE("flux matches the closed form with standard-library elliptic integrals") {
+    // greens.cpp computes K and E by the AGM; check it against std::comp_ellint over every regime,
+    // from far field (small k) to next to the filament (k near 1).
+    for (double R : {0.05, 0.3, 0.9, 0.999, 1.0005, 1.3, 4.0, 60.0}) {
+        for (double Z : {0.0, 1e-4, 0.02, 0.5, 3.0}) {
+            const double Rc = 1.0;
+            const double k2 = 4.0 * R * Rc / ((R + Rc) * (R + Rc) + Z * Z);
+            const double k = std::sqrt(k2);
+            const double expected = mu0 / (2.0 * pi) * std::sqrt(R * Rc) *
+                                    ((2.0 - k2) * std::comp_ellint_1(k) - 2.0 * std::comp_ellint_2(k)) /
+                                    k;
+            CHECK(greens_psi(Rc, 0.0, R, Z) == doctest::Approx(expected).epsilon(1e-10));
+        }
+    }
+}
