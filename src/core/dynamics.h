@@ -4,6 +4,7 @@
 #include "core/equilibrium.h"
 
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace shafranov {
@@ -25,8 +26,11 @@ public:
     Simulation(const MachineGrid& mg, const CircuitModel& model, const Profile& profile,
                const Equilibrium& start, const Currents& start_currents, double dt);
 
-    // Advances one step of dt with the given circuit voltages (size n_circuits). Throws PlasmaLost
-    // when the plasma is lost (state() then still holds the last good step).
+    // Advances one step of dt with the given circuit voltages (size n_circuits), splitting it into
+    // smaller steps where the plasma moves too fast for one (late in a VDE). Throws PlasmaLost when
+    // the plasma is lost: no magnetic axis inside the limiter, or no convergence even at dt / 4,
+    // which late in a VDE (~5 cm displaced) is where this solver stops following it. The state then
+    // still holds the last good step.
     void step(const std::vector<double>& voltages);
     // Voltages that hold the starting circuit currents in steady state: V = R I.
     std::vector<double> holding_voltages() const;
@@ -44,7 +48,12 @@ private:
     Equilibrium eq_;
     Currents currents_;
     Eigen::VectorXd phi_; // plasma flux linkage with each conductor at the current state
-    Eigen::LLT<Eigen::MatrixXd> lhs_;
+    // (M + h R) factorised for h = dt / 2^depth, built on demand: a step that does not converge
+    // is retried as two half steps, recursively, down to dt / 4.
+    std::vector<Eigen::LLT<Eigen::MatrixXd>> lhs_;
+    const Eigen::LLT<Eigen::MatrixXd>& lhs(int depth);
+    void substep(const std::vector<double>& voltages, int depth);
+    bool advance(const std::vector<double>& voltages, int depth, std::string& why);
     double dt_;
     double time_ = 0.0;
 };

@@ -45,12 +45,20 @@ Simulation::Simulation(const MachineGrid& mg, const CircuitModel& model, const P
         throw std::invalid_argument("Simulation: size mismatch between grid, model and currents");
     }
     phi_ = plasma_linkage(mg_, eq_.jphi);
-    Eigen::MatrixXd lhs = model_.M;
-    lhs.diagonal() += dt_ * model_.R;
-    lhs_.compute(lhs);
-    if (lhs_.info() != Eigen::Success) {
-        throw std::runtime_error("Simulation: M + dt R is not positive definite");
+    lhs(0); // fail early if M + dt R is not positive definite
+}
+
+const Eigen::LLT<Eigen::MatrixXd>& Simulation::lhs(int depth) {
+    while (static_cast<int>(lhs_.size()) <= depth) {
+        const double h = dt_ / static_cast<double>(1 << lhs_.size());
+        Eigen::MatrixXd a = model_.M;
+        a.diagonal() += h * model_.R;
+        lhs_.emplace_back(a);
+        if (lhs_.back().info() != Eigen::Success) {
+            throw std::runtime_error("Simulation: M + dt R is not positive definite");
+        }
     }
+    return lhs_[static_cast<std::size_t>(depth)];
 }
 
 std::vector<double> Simulation::holding_voltages() const {
@@ -62,12 +70,29 @@ std::vector<double> Simulation::holding_voltages() const {
 }
 
 void Simulation::step(const std::vector<double>& voltages) {
-    const std::size_t nc = static_cast<std::size_t>(model_.n_circuits);
-    const std::size_t nv = static_cast<std::size_t>(model_.n_vessel);
-    if (voltages.size() != nc) {
+    if (voltages.size() != static_cast<std::size_t>(model_.n_circuits)) {
         throw std::invalid_argument("Simulation::step needs one voltage per circuit");
     }
+    substep(voltages, 0);
+}
 
+void Simulation::substep(const std::vector<double>& voltages, int depth) {
+    std::string why;
+    if (advance(voltages, depth, why)) {
+        return;
+    }
+    if (depth == 2) {
+        throw PlasmaLost(why);
+    }
+    substep(voltages, depth + 1);
+    substep(voltages, depth + 1);
+}
+
+bool Simulation::advance(const std::vector<double>& voltages, int depth, std::string& why) {
+    const double h = dt_ / static_cast<double>(1 << depth);
+    const Eigen::LLT<Eigen::MatrixXd>& factor = lhs(depth);
+    const std::size_t nc = static_cast<std::size_t>(model_.n_circuits);
+    const std::size_t nv = static_cast<std::size_t>(model_.n_vessel);
     Eigen::VectorXd i_old(static_cast<Eigen::Index>(nc + nv));
     for (std::size_t c = 0; c < nc; ++c) {
         i_old[static_cast<Eigen::Index>(c)] = currents_.circuits[c];
@@ -79,13 +104,13 @@ void Simulation::step(const std::vector<double>& voltages) {
 
     Eigen::VectorXd drive = Eigen::VectorXd::Zero(i_old.size());
     for (std::size_t c = 0; c < nc; ++c) {
-        drive[static_cast<Eigen::Index>(c)] = dt_ * voltages[c];
+        drive[static_cast<Eigen::Index>(c)] = h * voltages[c];
     }
     const Eigen::VectorXd base = model_.M * i_old + drive + phi_old;
 
     const Feedback feedback = [&](const Equilibrium& eq, Currents& currents) {
         const Eigen::VectorXd phi = plasma_linkage(mg_, eq.jphi);
-        const Eigen::VectorXd i_new = lhs_.solve(base - phi);
+        const Eigen::VectorXd i_new = factor.solve(base - phi);
         for (std::size_t c = 0; c < nc; ++c) {
             currents.circuits[c] = i_new[static_cast<Eigen::Index>(c)];
         }
@@ -108,22 +133,25 @@ void Simulation::step(const std::vector<double>& voltages) {
     options.relax = 1.0;
     options.anderson = 0;
 
-    const std::string when = " at t = " + std::to_string(time_ + dt_) + " s";
+    const std::string when = " at t = " + std::to_string(time_ + h) + " s";
     Equilibrium next;
     try {
         next = solve_equilibrium(mg_, currents, profile_, initial, options, feedback);
     } catch (const std::runtime_error& e) {
-        throw PlasmaLost(std::string("plasma lost") + when + ": " + e.what());
+        why = std::string("plasma lost") + when + ": " + e.what();
+        return false;
     }
     if (!next.converged) {
-        throw PlasmaLost("plasma lost (equilibrium did not converge)" + when);
+        why = "the solver can no longer follow the plasma (axis at Z = " +
+              std::to_string(eq_.topology.axis.Z) + " m)" + when;
+        return false;
     }
 
     // Close the flux books exactly with the converged plasma: the iteration's last circuit solve
     // used the previous iterate's current, which differs by up to the tolerance, and that error
     // would otherwise accumulate from step to step.
     phi_ = plasma_linkage(mg_, next.jphi);
-    const Eigen::VectorXd i_new = lhs_.solve(base - phi_);
+    const Eigen::VectorXd i_new = factor.solve(base - phi_);
     for (std::size_t c = 0; c < nc; ++c) {
         currents.circuits[c] = i_new[static_cast<Eigen::Index>(c)];
     }
@@ -132,7 +160,8 @@ void Simulation::step(const std::vector<double>& voltages) {
     }
     eq_ = std::move(next);
     currents_ = std::move(currents);
-    time_ += dt_;
+    time_ += h;
+    return true;
 }
 
 } // namespace shafranov
