@@ -168,3 +168,18 @@ TEST_CASE("TCV lower single-null equilibrium agrees with FreeGS") {
         CHECK(std::abs(s.currents.circuits[c] - refvals[mg.circuits[c]]) < 0.001 * scale);
     }
 }
+
+TEST_CASE("a warm start from the previous solution converges in a few iterations") {
+    const MachineGrid& mg = tcv_grid();
+    const Solved& s = tcv_lsn();
+    Currents currents = s.currents;
+    InitialPlasma warm{0.88, 0.0, 0.15};
+    warm.jphi = s.eq.jphi;
+    const Equilibrium eq = solve_equilibrium(mg, currents, Profile{2e5, 0.3, 1.0, 2.0, 0.88}, warm,
+                                             SolveOptions{}, shape_feedback(mg, tcv_targets()));
+    CHECK(eq.converged);
+    CHECK(eq.iterations < s.eq.iterations / 4);
+    CHECK(std::abs(eq.topology.axis.R - s.eq.topology.axis.R) < 1e-4);
+    CHECK(std::abs(eq.topology.axis.Z - s.eq.topology.axis.Z) < 1e-4);
+    MESSAGE("cold start ", s.eq.iterations, " iterations, warm start ", eq.iterations);
+}
