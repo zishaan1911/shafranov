@@ -17,7 +17,8 @@ add_executable(shafranov_tests
   test_poisson.cpp
   test_profiles.cpp
   test_topology.cpp
-  test_equilibrium.cpp)
+  test_equilibrium.cpp
+  test_inverse.cpp)
 target_link_libraries(shafranov_tests PRIVATE shafranov_core shafranov_warnings doctest::doctest)
 target_compile_definitions(shafranov_tests PRIVATE
   SHAFRANOV_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
