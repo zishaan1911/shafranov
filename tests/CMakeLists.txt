@@ -23,7 +23,8 @@ add_executable(shafranov_tests
   test_inverse.cpp
   test_worker.cpp
   test_dynamics.cpp
-  test_control.cpp)
+  test_control.cpp
+  test_discharge.cpp)
 target_link_libraries(shafranov_tests PRIVATE shafranov_core shafranov_warnings doctest::doctest)
 target_compile_definitions(shafranov_tests PRIVATE
   SHAFRANOV_DATA_DIR="${PROJECT_SOURCE_DIR}/data"
