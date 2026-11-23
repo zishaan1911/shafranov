@@ -99,6 +99,108 @@ std::vector<char> region(const Grid& g, const std::vector<double>& psi, const Cr
     return in;
 }
 
+
+// Value, gradient and Hessian of psi at (R, Z) from a C1 bicubic Hermite patch whose corner
+// derivatives are central differences. Unlike a one-step Taylor estimate from the nearest node,
+// this varies continuously as a critical point moves between cells.
+struct Local {
+    double f, fR, fZ, fRR, fZZ, fRZ;
+};
+
+Local bicubic(const Grid& g, const std::vector<double>& psi, double R, double Z) {
+    const double x = (R - g.Rmin) / g.dR();
+    const double y = (Z - g.Zmin) / g.dZ();
+    const int i = std::clamp(static_cast<int>(std::floor(x)), 1, g.nR - 3);
+    const int j = std::clamp(static_cast<int>(std::floor(y)), 1, g.nZ - 3);
+    const double u = x - i;
+    const double v = y - j;
+    auto f = [&](int a, int b) { return psi[at(g, a, b)]; };
+
+    // Hermite basis on [0, 1] and its first and second derivatives: H0, H1 carry values, G0, G1
+    // carry slopes.
+    auto basis = [](double t, double out[4][3]) {
+        out[0][0] = 2 * t * t * t - 3 * t * t + 1;
+        out[0][1] = 6 * t * t - 6 * t;
+        out[0][2] = 12 * t - 6;
+        out[1][0] = -2 * t * t * t + 3 * t * t;
+        out[1][1] = -6 * t * t + 6 * t;
+        out[1][2] = -12 * t + 6;
+        out[2][0] = t * t * t - 2 * t * t + t;
+        out[2][1] = 3 * t * t - 4 * t + 1;
+        out[2][2] = 6 * t - 4;
+        out[3][0] = t * t * t - t * t;
+        out[3][1] = 3 * t * t - 2 * t;
+        out[3][2] = 6 * t - 2;
+    };
+    double bu[4][3], bv[4][3];
+    basis(u, bu);
+    basis(v, bv);
+
+    Local L{0, 0, 0, 0, 0, 0};
+    for (int p = 0; p < 2; ++p) {
+        for (int q = 0; q < 2; ++q) {
+            const int a = i + p;
+            const int b = j + q;
+            const double val = f(a, b);
+            const double fu = 0.5 * (f(a + 1, b) - f(a - 1, b));
+            const double fv = 0.5 * (f(a, b + 1) - f(a, b - 1));
+            const double fuv =
+                0.25 * (f(a + 1, b + 1) - f(a + 1, b - 1) - f(a - 1, b + 1) + f(a - 1, b - 1));
+            // Terms: value * H_p(u) H_q(v) + fu * G_p(u) H_q(v) + fv * H_p(u) G_q(v) + fuv * G G.
+            const double* Hu = bu[p];
+            const double* Gu = bu[2 + p];
+            const double* Hv = bv[q];
+            const double* Gv = bv[2 + q];
+            for (int du = 0; du < 3; ++du) {
+                for (int dv = 0; dv + du < 3; ++dv) {
+                    const double term = val * Hu[du] * Hv[dv] + fu * Gu[du] * Hv[dv] +
+                                        fv * Hu[du] * Gv[dv] + fuv * Gu[du] * Gv[dv];
+                    if (du == 0 && dv == 0) L.f += term;
+                    if (du == 1 && dv == 0) L.fR += term;
+                    if (du == 0 && dv == 1) L.fZ += term;
+                    if (du == 2 && dv == 0) L.fRR += term;
+                    if (du == 0 && dv == 2) L.fZZ += term;
+                    if (du == 1 && dv == 1) L.fRZ += term;
+                }
+            }
+        }
+    }
+    const double dR = g.dR();
+    const double dZ = g.dZ();
+    L.fR /= dR;
+    L.fZ /= dZ;
+    L.fRR /= dR * dR;
+    L.fZZ /= dZ * dZ;
+    L.fRZ /= dR * dZ;
+    return L;
+}
+
+// Newton iteration for grad psi = 0 on the bicubic patches, from (R, Z). Fails if it does not
+// settle within two cells of the start.
+bool refine(const Grid& g, const std::vector<double>& psi, double& R, double& Z, Local& L) {
+    const double R0 = R;
+    const double Z0 = Z;
+    for (int it = 0; it < 30; ++it) {
+        L = bicubic(g, psi, R, Z);
+        const double det = L.fRR * L.fZZ - L.fRZ * L.fRZ;
+        if (det == 0.0) {
+            return false;
+        }
+        const double dRn = (-L.fR * L.fZZ + L.fZ * L.fRZ) / det;
+        const double dZn = (-L.fZ * L.fRR + L.fR * L.fRZ) / det;
+        R += dRn;
+        Z += dZn;
+        if (std::abs(R - R0) > 2 * g.dR() || std::abs(Z - Z0) > 2 * g.dZ()) {
+            return false;
+        }
+        if (std::abs(dRn) < 1e-10 * g.dR() && std::abs(dZn) < 1e-10 * g.dZ()) {
+            L = bicubic(g, psi, R, Z);
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 double interpolate(const Grid& g, const std::vector<double>& f, double R, double Z) {
@@ -162,24 +264,18 @@ Topology find_topology(const Grid& g, const std::vector<double>& psi,
                 continue;
             }
 
-            const Derivs d = derivs(g, psi, i, j);
-            const double det = d.pRR * d.pZZ - d.pRZ * d.pRZ;
-            if (det == 0.0) {
-                continue;
-            }
-            const double deltaR = (-d.pR * d.pZZ + d.pZ * d.pRZ) / det;
-            const double deltaZ = (-d.pZ * d.pRR + d.pR * d.pRZ) / det;
-            if (std::abs(deltaR) > dR || std::abs(deltaZ) > dZ) {
+            double R = g.R(i);
+            double Z = g.Z(j);
+            Local L;
+            if (!refine(g, psi, R, Z, L)) {
                 continue;
             }
             Candidate p;
-            p.R = g.R(i) + deltaR;
-            p.Z = g.Z(j) + deltaZ;
-            p.psi = psi[at(g, i, j)] + d.pR * deltaR + d.pZ * deltaZ +
-                    0.5 * (d.pRR * deltaR * deltaR + 2.0 * d.pRZ * deltaR * deltaZ +
-                           d.pZZ * deltaZ * deltaZ);
-            p.xpoint = det < 0.0;
-            p.maximum = d.pRR + d.pZZ < 0.0;
+            p.R = R;
+            p.Z = Z;
+            p.psi = L.f;
+            p.xpoint = L.fRR * L.fZZ - L.fRZ * L.fRZ < 0.0;
+            p.maximum = L.fRR + L.fZZ < 0.0;
 
             bool duplicate = false;
             for (const Candidate& q : found) {
