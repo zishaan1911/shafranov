@@ -12,6 +12,7 @@ add_library(shafranov_warnings INTERFACE)
 target_compile_options(shafranov_warnings INTERFACE -Wall -Wextra -Wpedantic -Werror)
 
 add_library(shafranov_core STATIC
+  src/core/coils.cpp
   src/core/dst.cpp
   src/core/eqdsk.cpp
   src/core/greens.cpp
