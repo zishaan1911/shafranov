@@ -18,6 +18,7 @@ add_library(shafranov_core STATIC
   src/core/equilibrium.cpp
   src/core/greens.cpp
   src/core/grid.cpp
+  src/core/inverse.cpp
   src/core/machine.cpp
   src/core/poisson.cpp
   src/core/profiles.cpp
