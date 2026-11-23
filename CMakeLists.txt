@@ -15,6 +15,7 @@ add_library(shafranov_core STATIC
   src/core/coils.cpp
   src/core/dst.cpp
   src/core/eqdsk.cpp
+  src/core/equilibrium.cpp
   src/core/greens.cpp
   src/core/grid.cpp
   src/core/machine.cpp
