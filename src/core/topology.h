@@ -27,9 +27,10 @@ double interpolate(const Grid& g, const std::vector<double>& f, double R, double
 // first).
 bool inside_polygon(const std::vector<Point>& polygon, double R, double Z);
 
-// Throws std::runtime_error if no O-point lies inside the limiter, std::invalid_argument on a size
-// mismatch.
-Topology find_topology(const Grid& g, const std::vector<double>& psi,
-                       const std::vector<Point>& limiter);
+// The axis is the O-point inside the limiter nearest axis_hint (default: the grid centre), so a
+// moving plasma can be followed. Throws std::runtime_error if no O-point lies inside the limiter,
+// std::invalid_argument on a size mismatch.
+Topology find_topology(const Grid& g, const std::vector<double>& psi, const std::vector<Point>& limiter,
+                       const Point* axis_hint = nullptr);
 
 } // namespace shafranov

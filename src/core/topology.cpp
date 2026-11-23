@@ -129,7 +129,7 @@ bool inside_polygon(const std::vector<Point>& polygon, double R, double Z) {
 }
 
 Topology find_topology(const Grid& g, const std::vector<double>& psi,
-                       const std::vector<Point>& limiter) {
+                       const std::vector<Point>& limiter, const Point* axis_hint) {
     if (psi.size() != static_cast<std::size_t>(g.size())) {
         throw std::invalid_argument("find_topology: psi size does not match grid");
     }
@@ -194,8 +194,8 @@ Topology find_topology(const Grid& g, const std::vector<double>& psi,
         }
     }
 
-    const double Rc = 0.5 * (g.Rmin + g.Rmax);
-    const double Zc = 0.5 * (g.Zmin + g.Zmax);
+    const double Rc = axis_hint != nullptr ? axis_hint->R : 0.5 * (g.Rmin + g.Rmax);
+    const double Zc = axis_hint != nullptr ? axis_hint->Z : 0.5 * (g.Zmin + g.Zmax);
     const Candidate* best = nullptr;
     double best_dist = 0.0;
     for (const Candidate& p : found) {
