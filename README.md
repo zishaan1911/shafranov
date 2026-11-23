@@ -7,7 +7,8 @@ It solves the Grad–Shafranov equation on TCV's coil and vessel geometry and ev
 currents in time, so the vertical instability comes out of the equations rather than being scripted.
 
 **Status:** free-boundary equilibria and the inverse shape solve agree with FreeGS; coil, vessel and plasma
-currents evolve in time and the vertical instability emerges from the circuit equations. Feedback control is next.
+currents evolve in time, the vertical instability emerges from the circuit equations, and feedback control
+(vertical PD on the G coil, coil current control on E, F and OH) runs a scripted discharge.
 
 ![The live window: a lower single-null TCV plasma, its separatrix and X-point, and the E and F coil currents the
 inverse solve chose](docs/window.png)
@@ -25,6 +26,15 @@ ctest --test-dir build --output-on-failure
 The live window (`build/src/app/shafranov_app`) needs OpenGL 3.3; pass `-DSHAFRANOV_APP=OFF` to build without it.
 Drag the plasma shape and the inverse solve picks the coil currents, or switch to fixed currents and watch an
 elongated plasma lose its vertical position.
+
+In **Discharge** mode a TCV-like discharge ramps from 120 kA at kappa 1.25 to 200 kA at kappa 1.45 under feedback
+control. Turn vertical control off and the plasma falls away exponentially:
+
+![A vertical displacement event: vertical control switched off at 17 ms (red), the axis then falls away
+exponentially](docs/discharge.png)
+
+Each 0.1 ms step takes ~0.2 s, so discharges play in slow motion. The solver follows a vertical displacement
+event until the plasma has moved about 5 cm; the final phase, when it reaches the wall, is not modelled yet.
 
 ## Validation
 
