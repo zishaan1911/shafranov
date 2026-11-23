@@ -1,12 +1,15 @@
 #include "core/inverse.h"
 
 #include "core/constants.h"
+#include "core/eqdsk.h"
 
 #include <doctest/doctest.h>
 
 #include <cmath>
 #include <algorithm>
 #include <cstddef>
+#include <fstream>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -115,3 +118,53 @@ TEST_CASE("shape_feedback rejects an unknown fixed circuit") {
     CHECK_THROWS_AS(shape_feedback(tcv_grid(), targets), std::invalid_argument);
 }
 
+TEST_CASE("TCV lower single-null equilibrium agrees with FreeGS") {
+    const MachineGrid& mg = tcv_grid();
+    const Solved& s = tcv_lsn();
+    const Topology& t = s.eq.topology;
+    REQUIRE(s.eq.converged);
+
+    std::ifstream file(SHAFRANOV_TEST_DATA_DIR "/freegs_tcv_lsn.geqdsk");
+    REQUIRE(file);
+    const GEqdsk ref = read_geqdsk(file);
+    REQUIRE(ref.nw == mg.grid.nR);
+    REQUIRE(ref.nh == mg.grid.nZ);
+
+    std::map<std::string, double> refvals;
+    std::ifstream csv(SHAFRANOV_TEST_DATA_DIR "/freegs_tcv_lsn.csv");
+    std::string line;
+    std::getline(csv, line); // header
+    while (std::getline(csv, line)) {
+        const auto comma = line.find(',');
+        refvals[line.substr(0, comma)] = std::stod(line.substr(comma + 1));
+    }
+
+    // Magnetic axis, X-point and the flux between them.
+    CHECK(std::abs(t.axis.R - ref.rmaxis) < 5e-4);
+    CHECK(std::abs(t.axis.Z - ref.zmaxis) < 5e-4);
+    REQUIRE_FALSE(t.xpoints.empty());
+    CHECK(std::abs(t.xpoints.front().R - refvals["xpoint_R"]) < 5e-4);
+    CHECK(std::abs(t.xpoints.front().Z - refvals["xpoint_Z"]) < 5e-4);
+    const double depth = t.psi_bndry - t.axis.psi;
+    CHECK(depth == doctest::Approx(ref.sibry - ref.simag).epsilon(0.005));
+
+    // Flux everywhere inside the plasma, relative to the axis.
+    double worst = 0.0;
+    for (std::size_t k = 0; k < t.inside.size(); ++k) {
+        if (t.inside[k] != 0) {
+            const double ours = s.eq.psi[k] - t.axis.psi;
+            const double theirs = ref.psirz[k] - ref.simag;
+            worst = std::max(worst, std::abs(ours - theirs) / std::abs(depth));
+        }
+    }
+    CHECK(worst < 0.005);
+
+    // Coil currents chosen by the inverse solve.
+    double scale = 0.0;
+    for (const std::string& c : mg.circuits) {
+        scale = std::max(scale, std::abs(refvals[c]));
+    }
+    for (std::size_t c = 0; c < mg.circuits.size(); ++c) {
+        CHECK(std::abs(s.currents.circuits[c] - refvals[mg.circuits[c]]) < 0.001 * scale);
+    }
+}

@@ -21,5 +21,6 @@ add_executable(shafranov_tests
   test_inverse.cpp)
 target_link_libraries(shafranov_tests PRIVATE shafranov_core shafranov_warnings doctest::doctest)
 target_compile_definitions(shafranov_tests PRIVATE
-  SHAFRANOV_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
+  SHAFRANOV_DATA_DIR="${PROJECT_SOURCE_DIR}/data"
+  SHAFRANOV_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 add_test(NAME shafranov_tests COMMAND shafranov_tests)
