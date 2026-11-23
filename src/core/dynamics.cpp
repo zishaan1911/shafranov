@@ -103,7 +103,10 @@ void Simulation::step(const std::vector<double>& voltages) {
     // The plasma boundary moving across grid nodes leaves a ~1e-6 noise floor in the Picard
     // residual; a step's real change is ~1e-4 and above, so 1e-5 resolves it without chasing noise.
     options.tolerance = 1e-5;
-    options.relax = 0.5;
+    // A warm-started step changes the state only slightly: plain Picard at full relaxation
+    // converges in ~15 iterations here, where Anderson extrapolation churns (~60).
+    options.relax = 1.0;
+    options.anderson = 0;
 
     const std::string when = " at t = " + std::to_string(time_ + dt_) + " s";
     Equilibrium next;
