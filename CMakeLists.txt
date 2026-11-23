@@ -23,7 +23,8 @@ add_library(shafranov_core STATIC
   src/core/machine.cpp
   src/core/poisson.cpp
   src/core/profiles.cpp
-  src/core/topology.cpp)
+  src/core/topology.cpp
+  src/sim/worker.cpp)
 target_include_directories(shafranov_core PUBLIC src)
 find_package(Threads REQUIRED)
 target_link_libraries(shafranov_core PUBLIC Threads::Threads PRIVATE shafranov_warnings)
