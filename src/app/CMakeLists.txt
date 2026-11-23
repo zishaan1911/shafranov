@@ -23,7 +23,8 @@ target_include_directories(imgui_implot SYSTEM PUBLIC
   ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${implot_SOURCE_DIR})
 target_link_libraries(imgui_implot PUBLIC glfw OpenGL::GL)
 
-add_executable(shafranov_app main.cpp)
+add_executable(shafranov_app main.cpp view.cpp)
+target_compile_definitions(shafranov_app PRIVATE SHAFRANOV_DATA_DIR="${PROJECT_SOURCE_DIR}/data")
 target_link_libraries(shafranov_app PRIVATE shafranov_core imgui_implot shafranov_warnings)
 if(MINGW)
   # Runs on double-click without the MSYS2 runtime DLLs on PATH.
