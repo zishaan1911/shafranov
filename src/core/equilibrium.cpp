@@ -138,19 +138,29 @@ Equilibrium solve_equilibrium(const MachineGrid& mg, Currents& currents, const P
 
     std::vector<double> jphi(n, 0.0);
     double total = 0.0;
-    for (int i = 0; i < g.nR; ++i) {
-        for (int j = 0; j < g.nZ; ++j) {
-            const double dr = g.R(i) - initial.R;
-            const double dz = g.Z(j) - initial.Z;
-            const double r2 = (dr * dr + dz * dz) / (initial.a * initial.a);
-            if (r2 < 1.0) {
-                jphi[static_cast<std::size_t>(g.idx(i, j))] = 1.0 - r2;
-                total += 1.0 - r2;
+    if (!initial.jphi.empty()) {
+        if (initial.jphi.size() != n) {
+            throw std::invalid_argument("solve_equilibrium: initial jphi has the wrong size");
+        }
+        jphi = initial.jphi;
+        for (const double J : jphi) {
+            total += J;
+        }
+    } else {
+        for (int i = 0; i < g.nR; ++i) {
+            for (int j = 0; j < g.nZ; ++j) {
+                const double dr = g.R(i) - initial.R;
+                const double dz = g.Z(j) - initial.Z;
+                const double r2 = (dr * dr + dz * dz) / (initial.a * initial.a);
+                if (r2 < 1.0) {
+                    jphi[static_cast<std::size_t>(g.idx(i, j))] = 1.0 - r2;
+                    total += 1.0 - r2;
+                }
             }
         }
     }
-    if (total <= 0.0) {
-        throw std::invalid_argument("solve_equilibrium: initial plasma covers no grid point");
+    if (total == 0.0) {
+        throw std::invalid_argument("solve_equilibrium: initial plasma carries no current");
     }
     for (double& J : jphi) {
         J *= profile.Ip / (total * cell);

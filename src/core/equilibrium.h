@@ -45,9 +45,11 @@ struct Equilibrium {
     bool converged = false;
 };
 
-// First guess for the plasma current: a parabolic disc of radius a centred at (R, Z).
+// First guess for the plasma current: a parabolic disc of radius a centred at (R, Z), or, if jphi
+// is not empty, that current density (e.g. a previous solution, for a warm start) rescaled to Ip.
 struct InitialPlasma {
     double R, Z, a;
+    std::vector<double> jphi = {};
 };
 
 struct SolveOptions {
