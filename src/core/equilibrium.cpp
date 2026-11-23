@@ -8,34 +8,48 @@
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
+#include <thread>
 
 namespace shafranov {
+
+namespace {
+
+// Runs f(k) for k in [0, count) on every hardware thread; each k is independent.
+template <class F> void parallel_for(std::size_t count, F f) {
+    const std::size_t workers = std::max(1u, std::thread::hardware_concurrency());
+    std::vector<std::thread> threads;
+    for (std::size_t w = 0; w < workers; ++w) {
+        threads.emplace_back([=] {
+            for (std::size_t k = w; k < count; k += workers) {
+                f(k);
+            }
+        });
+    }
+    for (std::thread& t : threads) {
+        t.join();
+    }
+}
+
+} // namespace
 
 MachineGrid make_machine_grid(const Machine& m, const Grid& g) {
     MachineGrid mg{g, circuit_names(m), circuit_windings(m), {}, {}, {}, {}, m.limiter, m.vessel};
     const auto n = static_cast<std::size_t>(g.size());
 
     mg.circuit_psi.assign(mg.circuits.size(), std::vector<double>(n, 0.0));
-    for (std::size_t c = 0; c < mg.circuits.size(); ++c) {
-        for (const Winding& w : mg.windings[c]) {
-            for (int i = 0; i < g.nR; ++i) {
-                for (int j = 0; j < g.nZ; ++j) {
-                    mg.circuit_psi[c][static_cast<std::size_t>(g.idx(i, j))] +=
-                        w.turns * greens_psi(w.R, w.Z, g.R(i), g.Z(j));
-                }
-            }
-        }
-    }
-
     mg.vessel_psi.assign(m.vessel.size(), std::vector<double>(n, 0.0));
-    for (std::size_t v = 0; v < m.vessel.size(); ++v) {
-        for (int i = 0; i < g.nR; ++i) {
-            for (int j = 0; j < g.nZ; ++j) {
-                mg.vessel_psi[v][static_cast<std::size_t>(g.idx(i, j))] =
-                    greens_psi(m.vessel[v].R, m.vessel[v].Z, g.R(i), g.Z(j));
+    parallel_for(n, [&](std::size_t k) {
+        const double R = g.R(static_cast<int>(k) / g.nZ);
+        const double Z = g.Z(static_cast<int>(k) % g.nZ);
+        for (std::size_t c = 0; c < mg.circuits.size(); ++c) {
+            for (const Winding& w : mg.windings[c]) {
+                mg.circuit_psi[c][k] += w.turns * greens_psi(w.R, w.Z, R, Z);
             }
         }
-    }
+        for (std::size_t v = 0; v < m.vessel.size(); ++v) {
+            mg.vessel_psi[v][k] = greens_psi(m.vessel[v].R, m.vessel[v].Z, R, Z);
+        }
+    });
 
     for (int i = 0; i < g.nR; ++i) {
         for (int j = 0; j < g.nZ; ++j) {
@@ -46,16 +60,16 @@ MachineGrid make_machine_grid(const Machine& m, const Grid& g) {
     }
 
     mg.boundary_greens.resize(mg.boundary.size() * n);
-    for (std::size_t b = 0; b < mg.boundary.size(); ++b) {
-        const int ib = mg.boundary[b] / g.nZ;
-        const int jb = mg.boundary[b] % g.nZ;
+    parallel_for(mg.boundary.size(), [&](std::size_t b) {
+        const double Rb = g.R(mg.boundary[b] / g.nZ);
+        const double Zb = g.Z(mg.boundary[b] % g.nZ);
         for (int i = 0; i < g.nR; ++i) {
             for (int j = 0; j < g.nZ; ++j) {
                 mg.boundary_greens[b * n + static_cast<std::size_t>(g.idx(i, j))] =
-                    greens_psi(g.R(i), g.Z(j), g.R(ib), g.Z(jb));
+                    greens_psi(g.R(i), g.Z(j), Rb, Zb);
             }
         }
-    }
+    });
     return mg;
 }
 

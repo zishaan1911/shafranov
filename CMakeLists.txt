@@ -24,7 +24,8 @@ add_library(shafranov_core STATIC
   src/core/profiles.cpp
   src/core/topology.cpp)
 target_include_directories(shafranov_core PUBLIC src)
-target_link_libraries(shafranov_core PRIVATE shafranov_warnings)
+find_package(Threads REQUIRED)
+target_link_libraries(shafranov_core PUBLIC Threads::Threads PRIVATE shafranov_warnings)
 
 enable_testing()
 add_subdirectory(tests)
