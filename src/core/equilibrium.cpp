@@ -166,6 +166,7 @@ Equilibrium solve_equilibrium(const MachineGrid& mg, Currents& currents, const P
         J *= profile.Ip / (total * cell);
     }
     std::vector<double> psi_pl = plasma_flux(jphi);
+    Point hint{initial.R, initial.Z}; // follow the axis from where the plasma starts
 
     Equilibrium eq;
     for (int it = 1; it <= options.max_iterations; ++it) {
@@ -189,7 +190,8 @@ Equilibrium solve_equilibrium(const MachineGrid& mg, Currents& currents, const P
             }
             eq.psi = total_psi();
         }
-        eq.topology = find_topology(g, eq.psi, mg.limiter);
+        eq.topology = find_topology(g, eq.psi, mg.limiter, &hint);
+        hint = {eq.topology.axis.R, eq.topology.axis.Z};
         eq.lambda = plasma_current(g, eq.psi, eq.topology.axis.psi, eq.topology.psi_bndry,
                                    eq.topology.inside, profile, jphi);
 
@@ -206,7 +208,7 @@ Equilibrium solve_equilibrium(const MachineGrid& mg, Currents& currents, const P
 
         if (change < options.tolerance) {
             eq.psi = total_psi();
-            eq.topology = find_topology(g, eq.psi, mg.limiter);
+            eq.topology = find_topology(g, eq.psi, mg.limiter, &hint);
             eq.lambda = plasma_current(g, eq.psi, eq.topology.axis.psi, eq.topology.psi_bndry,
                                        eq.topology.inside, profile, jphi);
             // psi_plasma must be the exact flux of the returned jphi, not the relaxed iterate.

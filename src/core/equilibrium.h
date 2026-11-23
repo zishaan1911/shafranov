@@ -47,6 +47,7 @@ struct Equilibrium {
 
 // First guess for the plasma current: a parabolic disc of radius a centred at (R, Z), or, if jphi
 // is not empty, that current density (e.g. a previous solution, for a warm start) rescaled to Ip.
+// (R, Z) is also where the magnetic axis is looked for first; the solver then follows it.
 struct InitialPlasma {
     double R, Z, a;
     std::vector<double> jphi = {};
